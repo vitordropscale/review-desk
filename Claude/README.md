@@ -44,18 +44,20 @@ var CONFIG = {
 
 ## 3. Subir no GitHub Pages
 
-1. Crie um repositório novo — **deixe como privado** (evita que apareça em buscas/listagens; veja a nota sobre visibilidade abaixo).
+1. Crie um repositório novo.
 2. Suba os dois arquivos `index.html` e `Code.gs` na raiz (o `Code.gs` fica só de referência/histórico — quem roda de verdade é a cópia que está no Apps Script).
 3. **Settings > Pages** → Source: `Deploy from a branch` → Branch: `main` / pasta `/ (root)` → Save.
 4. Em alguns minutos o GitHub mostra o link (algo como `https://seu-usuario.github.io/nome-do-repo/`). É esse link que a equipe usa no dia a dia.
 
 ### Repositório privado x público — o que isso muda de verdade
 
-Repositório e site publicado são duas coisas separadas no GitHub. **Mesmo com o repositório privado, a página publicada no GitHub Pages fica pública por padrão** — qualquer pessoa com o link acessa, sem precisar de conta ou login no GitHub. Repositório privado só impede que o *código* apareça em buscas e listagens públicas do GitHub; não restringe quem abre o *site*.
+No plano **Free** do GitHub (o padrão de conta pessoal), o Pages só funciona em repositório **público** — se o repositório for privado, a opção de publicar nem aparece em Settings > Pages. Pra manter o repositório privado e ainda assim usar Pages, precisa do plano **Pro** (pago, uns US$4/mês). Então, a não ser que vocês já tenham ou queiram esse plano, o repositório precisa ficar **público**.
 
-Existe acesso restrito de verdade (só quem tem permissão no repositório consegue abrir o site), mas isso exige **GitHub Enterprise Cloud** — não é algo que faça sentido pagar só por causa deste painel. Por isso o login por e-mail/senha abaixo: ele não é autenticação de verdade (é só JavaScript rodando no navegador de quem abrir o link — dá pra contornar vendo o código-fonte), mas evita que alguém que caia no link por acaso veja os dados na hora. Repositório privado + link não divulgado fora da equipe + esse login é, na prática, o mesmo nível de proteção que vocês já usam no dashboard de KPIs no Netlify.
+E mesmo que fosse privado (com Pro), a página publicada no GitHub Pages fica pública por padrão de qualquer forma — repositório e site são coisas separadas, e site restrito de verdade (só quem tem permissão no repo abre) exige GitHub Enterprise Cloud, o que não faz sentido só por causa deste painel.
 
-Se um dia vocês quiserem acesso restrito de verdade sem pagar Enterprise, dá pra colocar o site atrás do **Cloudflare Access** (tem plano gratuito para uso pequeno, com login por e-mail de verdade) — isso é um projeto à parte, não algo que já vem configurado aqui.
+Como o repositório vai ficar público, **o código-fonte (com a URL do Apps Script) fica visível pra qualquer um**. Por isso o `Code.gs` desta entrega exige a senha (`SHARED_SECRET`) tanto pra ler quanto pra escrever na planilha — sem isso, bastaria alguém achar a URL pra ver todos os reviews, sem precisar de senha nenhuma. Ainda assim, use um nome de repositório que não entregue o que é ("review-desk" é razoavelmente neutro) e não divulgue o link do site fora da equipe. O login por e-mail/senha do painel (abaixo) é uma camada a mais, não a proteção principal — a proteção real aqui é a senha compartilhada no `Code.gs`/`index.html`.
+
+Se um dia vocês quiserem manter o repositório privado e ainda usar Pages, o caminho é o plano Pro. Se quiserem site com login de verdade (por e-mail, sem essas limitações), dá pra colocar atrás do **Cloudflare Access** (tem plano gratuito pra uso pequeno) — projetos à parte, não vêm configurados aqui.
 
 ## Login do painel
 

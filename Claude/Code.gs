@@ -79,7 +79,11 @@ function jsonOut_(obj) {
 
 function doGet(e) {
   try {
-    const action = (e.parameter && e.parameter.action) || 'list';
+    const params = (e && e.parameter) || {};
+    if (params.secret !== SHARED_SECRET) {
+      return jsonOut_({ ok: false, error: 'unauthorized' });
+    }
+    const action = params.action || 'list';
     if (action === 'list') {
       return jsonOut_({ ok: true, rows: readAll_() });
     }

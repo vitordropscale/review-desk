@@ -372,7 +372,7 @@ function populateStoreSelects(){
 
 /* ---------------- API ---------------- */
 function apiList(){
-  return fetch(CONFIG.API_URL + "?action=list").then(function(res){ return res.json(); });
+  return fetch(CONFIG.API_URL + "?action=list&secret=" + encodeURIComponent(CONFIG.SHARED_SECRET)).then(function(res){ return res.json(); });
 }
 function apiAdd(data){
   return fetch(CONFIG.API_URL, {
