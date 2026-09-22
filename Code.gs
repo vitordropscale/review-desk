@@ -47,13 +47,31 @@ function rowToObject_(headers, row) {
   return obj;
 }
 
+/**
+ * A planilha converte sozinha "2026-09-04" numa célula de data, e aí getValues()
+ * devolve um objeto Date — que o JSON serializa como "2026-09-04T03:00:00.000Z".
+ * O site esperava "2026-09-04", e é daí que vinha o "NaNd" e o campo de data em
+ * branco. Aqui devolvemos sempre texto no formato certo.
+ */
+function normalizeRow_(obj) {
+  const tz = Session.getScriptTimeZone() || 'America/Sao_Paulo';
+  Object.keys(obj).forEach(function (k) {
+    const v = obj[k];
+    if (!(v instanceof Date)) return;
+    obj[k] = (k === 'review_date')
+      ? Utilities.formatDate(v, tz, 'yyyy-MM-dd')   // data pura
+      : v.toISOString();                            // created_at / updated_at
+  });
+  return obj;
+}
+
 function readAll_() {
   const sheet = getSheet_();
   const range = sheet.getDataRange().getValues();
   const headers = range[0];
   return range.slice(1)
     .filter(function (r) { return r[0] !== ''; })
-    .map(function (r) { return rowToObject_(headers, r); });
+    .map(function (r) { return normalizeRow_(rowToObject_(headers, r)); });
 }
 
 function findRowIndexById_(sheet, id) {
@@ -113,7 +131,7 @@ function doPost(e) {
         d.risk ? 'TRUE' : 'FALSE', d.notes || ''
       ];
       sheet.appendRow(row);
-      return jsonOut_({ ok: true, row: rowToObject_(HEADERS, row) });
+      return jsonOut_({ ok: true, row: normalizeRow_(rowToObject_(HEADERS, row)) });
     }
 
     if (body.action === 'update') {
@@ -126,7 +144,7 @@ function doPost(e) {
       if ('risk' in d) merged.risk = d.risk ? 'TRUE' : 'FALSE';
       const newRow = HEADERS.map(function (h) { return merged[h]; });
       sheet.getRange(idx, 1, 1, HEADERS.length).setValues([newRow]);
-      return jsonOut_({ ok: true, row: rowToObject_(HEADERS, newRow) });
+      return jsonOut_({ ok: true, row: normalizeRow_(rowToObject_(HEADERS, newRow)) });
     }
 
     return jsonOut_({ ok: false, error: 'unknown_action' });

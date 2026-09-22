@@ -90,8 +90,15 @@ O login fica lembrado no navegador só até a aba fechar (usa `sessionStorage`) 
 - **Filtros** (loja, status, nota, busca por responsável/nota/ID) ficam no topo da fila.
 - O painel atualiza sozinho a cada 30 segundos, e tem um botão **Atualizar** pra forçar na hora.
 
+## Visual
+
+O painel usa um tema escuro único (não segue mais o claro/escuro do sistema), alinhado ao CS Dashboard: fundo quase preto, cards com uma linha fina de cor no topo e o número em destaque. A cor entra só onde significa alguma coisa — azul para o que está em andamento, âmbar para atenção, rosa para o que estourou o SLA/risco de chargeback, verde para resolvido. **Card zerado fica cinza**: o "Passou do SLA" só fica vermelho quando existe algo atrasado de verdade.
+
+Se quiser mexer na paleta, tudo está nas variáveis CSS no topo do `<style>` (`--bg`, `--surface`, `--accent`, `--ok`, `--warn`, `--crit`...). Mudar ali muda o painel inteiro.
+
 ## Limitações que valem saber
 
 - **Sem tempo real de verdade**: se duas pessoas editarem o mesmo review ao mesmo tempo, quem salvar por último apaga a mudança da outra. Como a franquia de gente mexendo é pequena, isso deve ser raro — mas vale um combinado de equipe (avisar no Slack antes de editar um review que outra pessoa já está tratando).
 - **A URL do Web App, o `SHARED_SECRET` e o login do painel ficam visíveis** pra quem tiver acesso ao repositório/arquivo (é JavaScript rodando no navegador — não tem como esconder de verdade num site estático, veja a seção "Login do painel" acima). Mantenha o repositório privado e não publique a URL fora da equipe.
+- **O `Code.gs` mudou** (ele agora devolve as datas como texto, senão a planilha manda um objeto `Date` e o painel mostrava "NaNd" no tempo em aberto). **Republique o Apps Script**: Gerenciar implantações > editar > Nova versão > Implantar. Enquanto não republicar, o painel continua funcionando — a correção do lado do site já cobre os dois formatos — mas a API segue devolvendo data ISO.
 - **Sem sincronização automática do Trustpilot** — os reviews entram na mão. Se um dia vocês tiverem acesso à API do Trustpilot, dá pra automatizar isso depois (nesse ponto, vale considerar migrar o banco pra algo que o n8n alcance direto, como o Supabase).

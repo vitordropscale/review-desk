@@ -367,8 +367,9 @@ textarea{min-height:84px;resize:vertical;line-height:1.5}
       <div class="field"><label for="add-ticket-link">Link do ticket (Richpanel)</label><input type="url" id="add-ticket-link" placeholder="https://app.richpanel.com/..."></div>
       <div class="field-row">
         <div class="field"><label for="add-date">Data do review</label><input type="date" id="add-date"></div>
-        <div class="field"><label for="add-owner">Responsável</label><input type="text" id="add-owner" list="owners-list" placeholder="Opcional"></div>
+        <div class="field"><label for="add-owner">Responsável</label><select id="add-owner"></select></div>
       </div>
+      <div class="field"><label for="add-status">Status</label><select id="add-status"></select></div>
       <div class="field"><label for="add-notes">Notas</label><textarea id="add-notes" placeholder="Opcional"></textarea></div>
       <label class="checkfield"><input type="checkbox" id="add-risk"> Menciona banco, disputa, advogado ou BBB (risco de chargeback)</label>
       <p class="savenote" id="add-savenote"></p>
@@ -380,7 +381,6 @@ textarea{min-height:84px;resize:vertical;line-height:1.5}
   </div>
 </div>
 
-<datalist id="owners-list"></datalist>
 
 <script>
 (function(){
@@ -392,6 +392,10 @@ var CONFIG = {
   SHARED_SECRET: "6cSr5yJ2Ce6NqWy5YghMLamDZHPU",
   SLA_HOURS: 24,
   STORES: ["Lumvelle", "Old Harvest"],
+  // Equipe que aparece no dropdown de Responsável. Nomes novos cadastrados pelo
+  // painel ("+ Novo responsável") passam a aparecer pra todos assim que forem
+  // salvos em algum review. Pra deixar fixo, adicione aqui.
+  OWNERS: ["Vitor"],
   POLL_MS: 30000
 };
 
@@ -500,7 +504,7 @@ function refresh(){
   return apiList().then(function(res){
     if(!res || res.ok !== true) throw new Error((res && res.error) || "resposta inválida");
     state.rows = res.rows || [];
-    showError(null);
+    showError(saveError);   // erro de salvamento fica na tela até salvar de novo
     setSync("ok","sincronizado · " + new Date().toLocaleTimeString("pt-BR"));
     renderAll();
   }).catch(function(err){
@@ -650,7 +654,7 @@ function renderDetail(force){
     +   '<div class="field"><label for="d-ticket-link">Link do ticket</label><input type="url" id="d-ticket-link" value="'+esc(r.ticket_link||"")+'"></div>'
     +   '<div class="field-row">'
     +     '<div class="field"><label for="d-date">Data do review</label><input type="date" id="d-date" value="'+esc(toYmd(r.review_date))+'"></div>'
-    +     '<div class="field"><label for="d-owner">Responsável</label><input type="text" id="d-owner" list="owners-list" value="'+esc(r.owner||"")+'"></div>'
+    +     '<div class="field"><label for="d-owner">Responsável</label><select id="d-owner">'+ownerOptions(r.owner)+'</select></div>'
     +   '</div>'
     +   '<div class="field"><label for="d-status">Status</label><select id="d-status">'+statusOpts+'</select></div>'
     +   '<label class="checkfield"><input type="checkbox" id="d-risk"'+(truthy(r.risk)?' checked':'')+'> Menciona banco, disputa, advogado ou BBB (risco de chargeback)</label>'
@@ -663,30 +667,61 @@ function renderDetail(force){
   detailRenderedId = r.id;
   detailDirty = false;
 
+  wireOwnerSelect($("d-owner"));
   host.querySelector(".d-body").addEventListener("input", function(){ detailDirty = true; });
-  host.querySelector(".d-body").addEventListener("change", function(){ detailDirty = true; });
+  // Salva sozinho: selects/checkbox na hora; campos de texto quando saem de foco
+  // (o "change" de input/textarea só dispara no blur — inclusive ao clicar em outra linha).
+  host.querySelector(".d-body").addEventListener("change", function(){ detailDirty = true; saveDetail(r.id); });
   $("d-reload").addEventListener("click", function(){ detailDirty = false; renderDetail(true); });
+  $("d-save").addEventListener("click", function(){ saveDetail(r.id); });
+}
 
-  $("d-save").addEventListener("click", function(){
-    var data = {
-      store: $("d-store").value, stars: Number($("d-stars").value),
-      review_link: $("d-review-link").value.trim(), ticket_link: $("d-ticket-link").value.trim(),
-      review_date: $("d-date").value, owner: $("d-owner").value.trim(),
-      status: $("d-status").value, risk: $("d-risk").checked, notes: $("d-notes").value.trim()
-    };
-    var note = $("d-savenote");
-    note.className = "savenote"; note.textContent = "Salvando…";
-    apiUpdate(r.id, data).then(function(res){
-      if(!res || res.ok !== true) throw new Error((res && res.error) || "falha ao salvar");
-      note.textContent = "Salvo.";
-      detailDirty = false;           // salvo: o refresh pode redesenhar o painel à vontade
-      $("d-stale").hidden = true;
-      return refresh();
-    }).catch(function(err){
-      note.className = "savenote err"; note.textContent = "Erro: " + err.message;
-    });
+/* Salvamentos em série: se mudar duas coisas rápido, a segunda espera a primeira
+   terminar, pra planilha não ficar com a versão velha. */
+var saveQueue = Promise.resolve();
+var pendingSaves = 0;
+var saveError = null;
+function readDetailForm(){
+  return {
+    store: $("d-store").value, stars: Number($("d-stars").value),
+    review_link: $("d-review-link").value.trim(), ticket_link: $("d-ticket-link").value.trim(),
+    review_date: $("d-date").value, owner: $("d-owner").value.trim(),
+    status: $("d-status").value, risk: $("d-risk").checked, notes: $("d-notes").value.trim()
+  };
+}
+function saveDetail(id){
+  if(detailRenderedId !== id || !$("d-status")) return;
+  var data = readDetailForm();
+  // atualiza a fila na hora, sem esperar a planilha
+  state.rows.forEach(function(x){ if(x.id === id){ Object.assign(x, data, { risk: data.risk ? "TRUE" : "FALSE" }); } });
+  renderQueue(); renderKpis();
+  var pill = document.querySelector("#detail .d-head .pill");
+  if(pill){ pill.className = "pill " + statusClass(data.status); pill.textContent = data.status; }
+
+  var note = $("d-savenote");
+  note.className = "savenote"; note.textContent = "Salvando…";
+  pendingSaves++;
+  saveQueue = saveQueue.then(function(){
+    return apiUpdate(id, data);
+  }).then(function(res){
+    if(!res || res.ok !== true) throw new Error((res && res.error) || "falha ao salvar");
+    pendingSaves--;
+    saveError = null; showError(null);
+    if(detailRenderedId === id && $("d-savenote")){
+      $("d-savenote").className = "savenote";
+      $("d-savenote").textContent = pendingSaves ? "Salvando…" : "Salvo automaticamente · " + new Date().toLocaleTimeString("pt-BR");
+    }
+    if(!pendingSaves){ detailDirty = false; if($("d-stale")) $("d-stale").hidden = true; return refresh(); }
+  }).catch(function(err){
+    pendingSaves--;
+    var msg = "NÃO SALVOU (" + id + "): " + err.message + ". Clique em Salvar para tentar de novo.";
+    if(detailRenderedId === id && $("d-savenote")){ $("d-savenote").className = "savenote err"; $("d-savenote").textContent = msg; }
+    saveError = msg; showError(msg);
   });
 }
+window.addEventListener("beforeunload", function(e){
+  if(pendingSaves > 0){ e.preventDefault(); e.returnValue = ""; }
+});
 
 /* ---------------- render: aging chart ---------------- */
 function renderAging(){
@@ -712,13 +747,38 @@ function renderAging(){
   }).join("");
 }
 
-function renderOwnersList(){
-  var owners = Array.from(new Set(state.rows.map(function(r){ return r.owner; }).filter(Boolean)));
-  $("owners-list").innerHTML = owners.map(function(o){ return '<option value="'+esc(o)+'">'; }).join("");
+var NEW_OWNER = "__novo__";
+function allOwners(){
+  var fromSheet = state.rows.map(function(r){ return String(r.owner||"").trim(); }).filter(Boolean);
+  return Array.from(new Set(CONFIG.OWNERS.concat(fromSheet))).sort(function(a,b){ return a.localeCompare(b,"pt-BR"); });
+}
+function ownerOptions(current){
+  current = String(current||"").trim();
+  var list = allOwners();
+  if(current && list.indexOf(current) === -1) list.push(current);
+  return '<option value="">Sem responsável</option>'
+    + list.map(function(o){ return '<option value="'+esc(o)+'"'+(o===current?' selected':'')+'>'+esc(o)+'</option>'; }).join("")
+    + '<option value="'+NEW_OWNER+'">+ Novo responsável…</option>';
+}
+/* "+ Novo responsável…" pede o nome e já deixa selecionado. Registrado direto no
+   select, então roda antes do salvamento automático do painel. */
+function wireOwnerSelect(sel){
+  var prev = sel.value;
+  sel.addEventListener("change", function(){
+    if(sel.value !== NEW_OWNER){ prev = sel.value; return; }
+    var name = (window.prompt("Nome do novo responsável:") || "").trim();
+    if(!name){ sel.value = prev; return; }
+    var exists = Array.prototype.some.call(sel.options, function(o){ return o.value === name; });
+    if(!exists){
+      var opt = document.createElement("option"); opt.value = name; opt.textContent = name;
+      sel.insertBefore(opt, sel.options[sel.options.length-1]);
+    }
+    sel.value = name; prev = name;
+  });
 }
 
 function renderAll(){
-  renderKpis(); renderQueue(); renderDetail(); renderAging(); renderOwnersList();
+  renderKpis(); renderQueue(); renderDetail(); renderAging();
 }
 
 /* ---------------- wiring: filters ---------------- */
@@ -751,8 +811,11 @@ $("queue").addEventListener("keydown", function(e){
 
 /* ---------------- wiring: add modal ---------------- */
 function openModal(){
-  $("add-review-link").value=""; $("add-ticket-link").value=""; $("add-owner").value=""; $("add-notes").value="";
+  $("add-review-link").value=""; $("add-ticket-link").value=""; $("add-notes").value="";
   $("add-risk").checked=false; $("add-stars").value="3";
+  $("add-status").innerHTML = STATUSES.map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join("");
+  $("add-status").value = "Investigando";
+  $("add-owner").innerHTML = ownerOptions("");
   $("add-date").value = toYmd(new Date());   // data local, não UTC
   $("add-savenote").textContent=""; $("add-savenote").className="savenote";
   $("modal-add").hidden = false;
@@ -763,6 +826,7 @@ function closeModal(){
   $("btn-add").focus();
 }
 $("btn-add").addEventListener("click", openModal);
+wireOwnerSelect($("add-owner"));
 document.querySelectorAll("[data-close-modal]").forEach(function(b){ b.addEventListener("click", closeModal); });
 $("modal-add").addEventListener("click", function(e){ if(e.target===$("modal-add")) closeModal(); });
 document.addEventListener("keydown", function(e){
@@ -774,7 +838,7 @@ $("add-submit").addEventListener("click", function(){
     store: $("add-store").value, stars: Number($("add-stars").value),
     review_link: $("add-review-link").value.trim(), ticket_link: $("add-ticket-link").value.trim(),
     review_date: $("add-date").value, owner: $("add-owner").value.trim(),
-    status: "Investigando", risk: $("add-risk").checked, notes: $("add-notes").value.trim()
+    status: $("add-status").value, risk: $("add-risk").checked, notes: $("add-notes").value.trim()
   };
   if(!data.review_link){ $("add-savenote").textContent = "Cole ao menos o link do review."; return; }
   var note = $("add-savenote");
